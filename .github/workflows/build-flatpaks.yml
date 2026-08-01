@@ -74,7 +74,7 @@ jobs:
             # Stable channel uses /releases/latest/download/ — no rolling tag needed.
             TAG="skip"
           else
-            TAG="latest-dev"
+            TAG="dev-rolling"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Build tag: $TAG"
@@ -85,27 +85,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
         run: |
+          set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          # Delete old release (ignore errors — may not exist or tag may be protected).
-          gh release delete $RELEASE_TAG --yes --cleanup-tag 2>&1 || true
-          git push origin :refs/tags/$RELEASE_TAG 2>&1 || true
-          # Create or update the release. Use a two-step approach:
-          # 1. Try to create. If it fails because tag already exists (protected tag),
-          #    fall through to step 2.
-          # 2. Ensure the release exists (create it if needed), then upload assets.
-          if ! gh release create $RELEASE_TAG \
+          # NEVER delete the release or its tag. A tag that has carried a
+          # release is permanently banned from re-creation by the
+          # immutable-release ruleset, so a delete is a one-way door: the
+          # re-create fails and the channel stays down. `latest-dev` was lost
+          # exactly this way. Create-if-missing, then clobber the asset.
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
               --title "Build $RELEASE_TAG" \
               --prerelease \
-              --notes "Multi-variant bootc-installer Flatpak build" \
-              ${{ matrix.variant.app_id }}.flatpak; then
-            echo "gh release create failed — ensuring release exists and uploading asset"
-            # Make sure a release exists for the tag (in case tag exists but release doesn't)
-            gh release create $RELEASE_TAG \
-              --title "Build $RELEASE_TAG" \
-              --prerelease \
-              --notes "Multi-variant bootc-installer Flatpak build" 2>/dev/null || true
-            gh release upload $RELEASE_TAG ${{ matrix.variant.app_id }}.flatpak --clobber
+              --notes "Multi-variant bootc-installer Flatpak build"
           fi
+          gh release upload "$RELEASE_TAG" ${{ matrix.variant.app_id }}.flatpak --clobber
 
       - name: Upload Flatpak to artifacts
         uses: actions/upload-artifact@v4

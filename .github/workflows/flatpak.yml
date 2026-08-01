@@ -93,32 +93,37 @@ jobs:
           path: org.bootcinstaller.Installer.Devel.flatpak
           retention-days: 30
 
-      - name: Delete existing latest-dev release (dev branch)
-        if: github.ref == 'refs/heads/dev'
-        run: |
-          gh release delete latest-dev --yes --cleanup-tag 2>&1 || true
-          git push origin :refs/tags/latest-dev 2>&1 || true
-        env:
-          GH_TOKEN: ${{ github.token }}
-
+      # NEVER delete this release or its tag.
+      #
+      # Once a release has existed on a tag, that tag name is permanently
+      # banned from re-creation by the immutable-release ruleset. The previous
+      # version of this step deleted `latest-dev` and then re-created it on
+      # every dev push; the first push after the ruleset took effect destroyed
+      # the release and could not put it back, taking the whole dev flatpak
+      # channel down (dakota-iso then 404s and silently falls back to the
+      # upstream tuna-os bundle). `latest-dev` is burned for good — hence the
+      # new tag name below.
+      #
+      # Create-if-missing, then clobber the asset. No deletes, ever.
       - name: Publish dev pre-release (dev branch)
         if: github.ref == 'refs/heads/dev'
         run: |
+          set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          if gh release create latest-dev \
+          if ! gh release view "$DEV_RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$DEV_RELEASE_TAG" \
               --title "Dev Build" \
               --prerelease \
-              --notes "Latest build from the \`dev\` branch. May be unstable." \
-              org.bootcinstaller.Installer.Devel.flatpak 2>/dev/null; then
-            echo "Release created"
-          else
-            gh release view latest-dev --json assets --jq '.assets[].name' | \
-              xargs -I{} gh release delete-asset latest-dev {} --yes 2>/dev/null || true
-            gh release upload latest-dev org.bootcinstaller.Installer.Devel.flatpak --clobber
-            echo "Release assets updated"
+              --notes "Rolling build from the \`dev\` branch. May be unstable."
           fi
+          gh release upload "$DEV_RELEASE_TAG" \
+            org.bootcinstaller.Installer.Devel.flatpak --clobber
+          gh release edit "$DEV_RELEASE_TAG" \
+            --notes "Rolling build from the \`dev\` branch. May be unstable.
+          Built from ${GITHUB_SHA} on $(date -u +%Y-%m-%dT%H:%M:%SZ)."
         env:
           GH_TOKEN: ${{ github.token }}
+          DEV_RELEASE_TAG: dev-rolling
 
       - name: Upload devel bundle for tagged release
         if: startsWith(github.ref, 'refs/tags/')
