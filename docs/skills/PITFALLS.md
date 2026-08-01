@@ -414,3 +414,38 @@ Before changing a default, verify every tool in that slice is present in the liv
 **How to check:** `podman unshare bash -c "M=\$(podman image mount <installer-image>); ls \$M/usr/sbin/mkfs.xfs || echo MISSING"`
 
 See: https://github.com/ublue-os/bluefin/discussions/4754
+
+---
+
+## The fisherman submodule tracked the wrong branch (2026-08-01)
+
+`.gitmodules` declared `branch = dev`, but fisherman's active line is **`main`** — on
+2026-08-01 `main` was 25 commits ahead of `dev`. fisherman's *default* branch is `dev`,
+so a PR opened there with the default base lands on the branch nobody ships, and
+`git submodule update --remote` pulled from a stale line.
+
+The pointer had not moved since **2026-06-23**. Everything that shipped in between —
+the flatpak in every stable dakota ISO — was built from that June commit. A user hit an
+ENOSPC install failure whose fix had been merged to fisherman `main` and still could not
+reach them, because this pointer is the only bridge.
+
+**Rules:**
+- fisherman PRs target `main`. `.gitmodules` now tracks `main`.
+- Bumping this pointer is what *ships* a fisherman fix. Merging in fisherman is not shipping.
+- Check the gap before assuming a fix is live:
+
+```bash
+gh api repos/projectbluefin/bootc-installer/contents/fisherman -q .sha
+gh api repos/projectbluefin/fisherman/compare/<that-sha>...main -q '{ahead:.ahead_by,behind:.behind_by}'
+```
+
+**Delivery chain** — three hops, each independently stale-able:
+
+```
+fisherman main → bootc-installer submodule → flatpak GitHub release → dakota ISO
+```
+
+The ISO downloads the bundle from a *release asset*, not from the branch:
+`releases/latest/download/org.bootcinstaller.Installer.flatpak` for the stable channel,
+`releases/download/latest-dev/...Devel.flatpak` for dev. So a merge to `prod` alone does
+not reach a stable ISO — a `v*` release must be cut.
