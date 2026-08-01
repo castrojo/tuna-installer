@@ -449,3 +449,37 @@ The ISO downloads the bundle from a *release asset*, not from the branch:
 `releases/latest/download/org.bootcinstaller.Installer.flatpak` for the stable channel,
 `releases/download/latest-dev/...Devel.flatpak` for dev. So a merge to `prod` alone does
 not reach a stable ISO — a `v*` release must be cut.
+
+---
+
+## Deleting a release tag is a one-way door (2026-08-01)
+
+Both flatpak workflows published the rolling dev bundle by *deleting* the
+`latest-dev` release and tag and then re-creating them on every push to `dev`.
+
+Once the immutable-release ruleset took effect, that pattern became a self-destruct:
+a tag that has ever carried a release is permanently banned from re-creation. The
+first `dev` push after the ruleset landed deleted the release and could not put it
+back — `gh release create latest-dev` fails with
+
+```
+HTTP 422: Validation Failed
+pre_receive Repository rule violations found
+Cannot create ref due to creations being restricted.
+```
+
+for CI's token *and* for a maintainer PAT. Re-running the job does not help. The whole
+dev flatpak channel went down: `dakota-iso`'s `install-flatpaks.sh` 404s on
+`releases/download/latest-dev/...` and silently falls back to the upstream `tuna-os`
+bundle, so a live ISO quietly ships someone else's installer.
+
+The ban is per tag *name*, not global — arbitrary new tags create fine. `latest-dev`
+itself is unusable forever.
+
+**Rules:**
+- Never `gh release delete --cleanup-tag` a rolling channel tag. Create-if-missing,
+  then `gh release upload --clobber`. Both workflows now do this.
+- The dev channel tag is now **`dev-rolling`**. `dakota-iso` fetches
+  `releases/download/dev-rolling/org.bootcinstaller.Installer.Devel.flatpak`; the two
+  repos must be changed together.
+- The workflow comment already warned about this for `latest-stable`. It was right.
