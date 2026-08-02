@@ -5,6 +5,19 @@ to work on this project as an AI agent. Read it before making changes.
 
 ---
 
+## Skill docs
+
+Task-specific knowledge lives in [`docs/skills/`](docs/skills/). Load the
+relevant file instead of reading this whole guide:
+
+| Need | Load |
+|---|---|
+| What lives in `docs/skills/` and what belongs there | [`INDEX.md`](docs/skills/INDEX.md) |
+| The working procedure for this repo | [`SKILL.md`](docs/skills/SKILL.md) |
+| Known traps, before debugging or changing the build | [`PITFALLS.md`](docs/skills/PITFALLS.md) |
+
+---
+
 ## Repository layout
 
 ```
